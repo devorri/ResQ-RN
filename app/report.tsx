@@ -32,7 +32,12 @@ export default function ReportScreen() {
     preselectedCategory ? [preselectedCategory] : []
   );
   const [selectedEmergencyType, setSelectedEmergencyType] = useState('');
-  const [image, setImage] = useState<{ uri: string; type: string; name: string } | null>(null);
+  const [images, setImages] = useState<Array<{
+    uri: string;
+    type: string;
+    name: string;
+    id: string;
+  }>>([]);
   const [video, setVideo] = useState<{ uri: string; type: string; name: string } | null>(null);
   const [location, setLocation] = useState<{
     latitude: number;
@@ -144,12 +149,13 @@ export default function ReportScreen() {
 
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
-        setImage({
+        const newImage = {
           uri: asset.uri,
           type: 'image/jpeg',
           name: `incident_${Date.now()}.jpg`,
-        });
-        setVideo(null); // Clear video if photo is taken
+          id: Date.now().toString(),
+        };
+        setImages(prev => [...prev, newImage]);
       }
     } catch (error) {
       console.error('Error taking photo:', error);
@@ -180,12 +186,15 @@ export default function ReportScreen() {
           type: 'video/mp4',
           name: `incident_${Date.now()}.mp4`,
         });
-        setImage(null); // Clear image if video is taken
       }
     } catch (error) {
       console.error('Error recording video:', error);
       Alert.alert('Error', 'Failed to record video. Please try again.');
     }
+  };
+
+  const removeImage = (id: string) => {
+    setImages(prev => prev.filter(img => img.id !== id));
   };
 
   const handleSubmit = async () => {
@@ -207,15 +216,15 @@ export default function ReportScreen() {
     setIsSubmitting(true);
 
     try {
-      // Ensure categories is properly formatted as an array
       const incidentData = {
         title: selectedEmergencyType.trim(),
         description: '',
-        categories: Array.isArray(categories) ? categories : [categories], // Ensure array format
+        categories: Array.isArray(categories) ? categories : [categories],
         latitude: location.latitude,
         longitude: location.longitude,
         address: location.address,
-        image: image || undefined,
+        image_url: images.map(img => img.uri).join(','), // Comma-separated image URLs
+        video_url: video ? video.uri : undefined, // FIX: Use undefined instead of null
       };
 
       console.log('Submitting incident with categories:', incidentData.categories);
@@ -251,10 +260,6 @@ export default function ReportScreen() {
           {/* Header Section */}
           <View style={styles.headerSection}>
             <Text style={styles.headerTitle}>{headerTitle}</Text>
-            <View style={styles.addressCard}>
-              <Ionicons name="location" size={16} color={COLORS.text.primary} />
-              <Text style={styles.addressText}>32 Lourdes Northwest, Angeles City</Text>
-            </View>
           </View>
 
           {/* Emergency Type Dropdown */}
@@ -313,22 +318,30 @@ export default function ReportScreen() {
 
           {/* Camera Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Open Camera & Take Photo & Video</Text>
+            <Text style={styles.sectionLabel}>Capture Photos & Videos</Text>
             <View style={styles.cameraSection}>
-              {image ? (
-                <View style={styles.mediaContainer}>
-                  <Image source={{ uri: image.uri }} style={styles.mediaPreview} />
-                  <View style={styles.timestampOverlay}>
-                    <Text style={styles.timestampText}>
-                      {new Date().toLocaleString()}
-                    </Text>
-                    <Text style={styles.appStampText}>ResQ App</Text>
-                  </View>
-                  <TouchableOpacity style={styles.removeMediaButton} onPress={() => setImage(null)}>
-                    <Ionicons name="close" size={20} color={COLORS.text.white} />
-                  </TouchableOpacity>
+              {/* Images Grid */}
+              {images.length > 0 && (
+                <View style={styles.mediaGrid}>
+                  {images.map((img) => (
+                    <View key={img.id} style={styles.mediaContainer}>
+                      <Image source={{ uri: img.uri }} style={styles.mediaPreview} />
+                      <View style={styles.timestampOverlay}>
+                        <Text style={styles.timestampText}>
+                          {new Date().toLocaleString()}
+                        </Text>
+                        <Text style={styles.appStampText}>ResQ App</Text>
+                      </View>
+                      <TouchableOpacity style={styles.removeMediaButton} onPress={() => removeImage(img.id)}>
+                        <Ionicons name="close" size={16} color={COLORS.text.white} />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
                 </View>
-              ) : video ? (
+              )}
+
+              {/* Video Preview */}
+              {video && (
                 <View style={styles.mediaContainer}>
                   <View style={styles.videoPreview}>
                     <Ionicons name="videocam" size={48} color={COLORS.text.secondary} />
@@ -344,18 +357,19 @@ export default function ReportScreen() {
                     <Ionicons name="close" size={20} color={COLORS.text.white} />
                   </TouchableOpacity>
                 </View>
-              ) : (
-                <View style={styles.mediaButtons}>
-                  <TouchableOpacity style={styles.mediaButton} onPress={takePhoto}>
-                    <Ionicons name="camera" size={32} color={COLORS.text.secondary} />
-                    <Text style={styles.mediaButtonText}>Take Photo</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.mediaButton} onPress={takeVideo}>
-                    <Ionicons name="videocam" size={32} color={COLORS.text.secondary} />
-                    <Text style={styles.mediaButtonText}>Record Video</Text>
-                  </TouchableOpacity>
-                </View>
               )}
+
+              {/* Media Buttons */}
+              <View style={styles.mediaButtons}>
+                <TouchableOpacity style={styles.mediaButton} onPress={takePhoto}>
+                  <Ionicons name="camera" size={24} color={COLORS.text.secondary} />
+                  <Text style={styles.mediaButtonText}>Take Photo</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.mediaButton} onPress={takeVideo}>
+                  <Ionicons name="videocam" size={24} color={COLORS.text.secondary} />
+                  <Text style={styles.mediaButtonText}>Record Video</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
 
@@ -450,11 +464,7 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 8,
   },
-  addressText: {
-    fontSize: 14,
-    color: COLORS.text.primary,
-    fontWeight: '600',
-  },
+ 
   // Section Styles
   section: {
     marginBottom: 24,
@@ -538,6 +548,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border.light,
   },
+  mediaGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
   mediaButtons: {
     flexDirection: 'row',
     gap: 12,
@@ -549,9 +565,9 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border.light,
     borderStyle: 'dashed',
     borderRadius: 12,
-    padding: 24,
+    padding: 20,
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
   mediaButtonText: {
     fontSize: 14,
@@ -563,51 +579,53 @@ const styles = StyleSheet.create({
     position: 'relative',
     borderRadius: 12,
     overflow: 'hidden',
+    width: 100,
+    height: 100,
   },
   mediaPreview: {
     width: '100%',
-    height: 200,
+    height: '100%',
     borderRadius: 12,
   },
   videoPreview: {
     width: '100%',
-    height: 200,
+    height: '100%',
     borderRadius: 12,
     backgroundColor: COLORS.background.gray,
     justifyContent: 'center',
     alignItems: 'center',
   },
   videoText: {
-    fontSize: 14,
+    fontSize: 12,
     color: COLORS.text.secondary,
-    marginTop: 8,
+    marginTop: 4,
   },
   timestampOverlay: {
     position: 'absolute',
-    bottom: 8,
-    left: 8,
+    bottom: 4,
+    left: 4,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   timestampText: {
-    fontSize: 10,
+    fontSize: 8,
     color: COLORS.text.white,
     fontWeight: '600',
   },
   appStampText: {
-    fontSize: 8,
+    fontSize: 6,
     color: COLORS.text.white,
     fontWeight: '400',
   },
   removeMediaButton: {
     position: 'absolute',
-    top: 8,
-    right: 8,
+    top: 4,
+    right: 4,
     backgroundColor: COLORS.status.error,
-    borderRadius: 20,
-    padding: 8,
+    borderRadius: 12,
+    padding: 4,
   },
   // Location Styles
   locationLoading: {

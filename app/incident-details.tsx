@@ -1,17 +1,28 @@
-import { CATEGORY_CONFIG, SEVERITY_CONFIG, STATUS_CONFIG } from '@/constants/category';
+import { CATEGORY_CONFIG, STATUS_CONFIG } from '@/constants/category';
 import { COLORS } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIncidents } from '@/contexts/IncidentContext';
 import { Ionicons } from '@expo/vector-icons';
+import { ResizeMode, Video } from 'expo-av';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Dimensions, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 export default function IncidentDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { incidents, acceptIncident, markInProgress, completeIncident } = useIncidents();
   const { user } = useAuth();
+  
+  // Video player ref
+  const videoRef = useRef<Video>(null);
+
+  // Photo viewer state
+  const [photoViewerVisible, setPhotoViewerVisible] = useState(false);
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
 
   // Fix: Compare as strings, don't convert to number
   const incident = incidents.find((i) => {
@@ -36,7 +47,33 @@ export default function IncidentDetailScreen() {
   const primaryCategory = incident.categories[0];
   const categoryConfig = CATEGORY_CONFIG[primaryCategory];
   const statusConfig = STATUS_CONFIG[incident.status];
-  const severityConfig = SEVERITY_CONFIG[incident.severity];
+
+  // Parse multiple images from comma-separated string
+  const imageUrls = incident.image_url 
+    ? incident.image_url.split(',').filter(url => url.trim() !== '')
+    : [];
+
+  // Photo viewer functions
+  const openPhotoViewer = (index: number) => {
+    setSelectedPhotoIndex(index);
+    setPhotoViewerVisible(true);
+  };
+
+  const closePhotoViewer = () => {
+    setPhotoViewerVisible(false);
+  };
+
+  const goToNextPhoto = () => {
+    if (selectedPhotoIndex < imageUrls.length - 1) {
+      setSelectedPhotoIndex(selectedPhotoIndex + 1);
+    }
+  };
+
+  const goToPrevPhoto = () => {
+    if (selectedPhotoIndex > 0) {
+      setSelectedPhotoIndex(selectedPhotoIndex - 1);
+    }
+  };
 
   // Correct status flow
   const canAccept = user?.role !== 'user' && incident.status === 'pending';
@@ -70,8 +107,52 @@ export default function IncidentDetailScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView style={styles.scrollView}>
-        {incident.image_url && (
-          <Image source={{ uri: incident.image_url }} style={styles.image} resizeMode="cover" />
+        {/* Multiple Images Section */}
+        {imageUrls.length > 0 && (
+          <View style={styles.mediaSection}>
+            <Text style={styles.mediaSectionTitle}>
+              Photos ({imageUrls.length})
+            </Text>
+            <ScrollView 
+              horizontal 
+              style={styles.imagesScrollView}
+              showsHorizontalScrollIndicator={true}
+            >
+              {imageUrls.map((url, index) => (
+                <TouchableOpacity 
+                  key={index} 
+                  style={styles.imageContainer}
+                  onPress={() => openPhotoViewer(index)}
+                >
+                  <Image 
+                    source={{ uri: url.trim() }} 
+                    style={styles.image} 
+                    resizeMode="cover" 
+                  />
+                  <View style={styles.imageNumberBadge}>
+                    <Text style={styles.imageNumberText}>{index + 1}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Video Section */}
+        {incident.video_url && (
+          <View style={styles.mediaSection}>
+            <Text style={styles.mediaSectionTitle}>Video</Text>
+            <View style={styles.videoContainer}>
+              <Video
+                ref={videoRef}
+                source={{ uri: incident.video_url }}
+                style={styles.videoPlayer}
+                resizeMode={ResizeMode.CONTAIN}
+                useNativeControls={true}
+                shouldPlay={false}
+              />
+            </View>
+          </View>
         )}
 
         <View style={styles.content}>
@@ -79,11 +160,6 @@ export default function IncidentDetailScreen() {
             <View style={styles.badgesRow}>
               <View style={[styles.categoryBadge, { backgroundColor: categoryConfig.color }]}>
                 <Text style={styles.categoryText}>{categoryConfig.label}</Text>
-              </View>
-              <View style={[styles.severityBadge, { backgroundColor: severityConfig.bgColor }]}>
-                <Text style={[styles.severityText, { color: severityConfig.textColor }]}>
-                  {severityConfig.label}
-                </Text>
               </View>
             </View>
 
@@ -191,6 +267,51 @@ export default function IncidentDetailScreen() {
         </View>
       </ScrollView>
 
+      {/* Photo Viewer Modal */}
+      <Modal
+        visible={photoViewerVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={closePhotoViewer}
+      >
+        <View style={styles.photoViewerContainer}>
+          {/* Close Button */}
+          <TouchableOpacity style={styles.closeButton} onPress={closePhotoViewer}>
+            <Ionicons name="close" size={28} color={COLORS.text.white} />
+          </TouchableOpacity>
+
+          {/* Photo Counter */}
+          <View style={styles.photoCounter}>
+            <Text style={styles.photoCounterText}>
+              {selectedPhotoIndex + 1} / {imageUrls.length}
+            </Text>
+          </View>
+
+          {/* Main Photo */}
+          <Image 
+            source={{ uri: imageUrls[selectedPhotoIndex]?.trim() }} 
+            style={styles.fullScreenImage}
+            resizeMode="contain"
+          />
+
+          {/* Navigation Arrows */}
+          {imageUrls.length > 1 && (
+            <>
+              {selectedPhotoIndex > 0 && (
+                <TouchableOpacity style={[styles.navButton, styles.prevButton]} onPress={goToPrevPhoto}>
+                  <Ionicons name="chevron-back" size={32} color={COLORS.text.white} />
+                </TouchableOpacity>
+              )}
+              {selectedPhotoIndex < imageUrls.length - 1 && (
+                <TouchableOpacity style={[styles.navButton, styles.nextButton]} onPress={goToNextPhoto}>
+                  <Ionicons name="chevron-forward" size={32} color={COLORS.text.white} />
+                </TouchableOpacity>
+              )}
+            </>
+          )}
+        </View>
+      </Modal>
+
       {/* Action Buttons - Correct Status Flow */}
       {canAccept && (
         <View style={styles.footer}>
@@ -227,13 +348,107 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
+  // Media Section Styles
+  mediaSection: {
+    backgroundColor: COLORS.background.white,
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border.light,
+  },
+  mediaSectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.text.primary,
+    marginBottom: 12,
+  },
+  imagesScrollView: {
+    flexGrow: 0,
+  },
+  imageContainer: {
+    position: 'relative',
+    marginRight: 12,
+  },
   image: {
-    width: '100%',
-    height: 300,
+    width: 200,
+    height: 150,
+    borderRadius: 8,
     backgroundColor: COLORS.border.light,
+  },
+  imageNumberBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  imageNumberText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.text.white,
+  },
+  videoContainer: {
+    width: '100%',
+    height: 250,
+    backgroundColor: '#000',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  videoPlayer: {
+    width: '100%',
+    height: '100%',
   },
   content: {
     padding: 16,
+  },
+  // Photo Viewer Styles
+  photoViewerContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 20,
+    padding: 8,
+  },
+  photoCounter: {
+    position: 'absolute',
+    top: 60,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  photoCounterText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text.white,
+  },
+  fullScreenImage: {
+    width: screenWidth,
+    height: screenHeight * 0.8,
+  },
+  navButton: {
+    position: 'absolute',
+    top: '50%',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 25,
+    padding: 12,
+    transform: [{ translateY: -25 }],
+  },
+  prevButton: {
+    left: 20,
+  },
+  nextButton: {
+    right: 20,
   },
   headerSection: {
     marginBottom: 24,
@@ -252,16 +467,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: COLORS.text.white,
-    textTransform: 'uppercase',
-  },
-  severityBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  severityText: {
-    fontSize: 12,
-    fontWeight: '700',
     textTransform: 'uppercase',
   },
   title: {

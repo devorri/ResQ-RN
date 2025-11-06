@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, logout, switchUserRole } = useAuth();
+  const { user, logout } = useAuth();
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -19,17 +19,6 @@ export default function ProfileScreen() {
           router.replace('/' as any);
         },
       },
-    ]);
-  };
-
-  const handleSwitchRole = () => {
-    Alert.alert('Switch Role (Demo)', 'Choose a role to test different views', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'User', onPress: () => switchUserRole('user') },
-      { text: 'Police Station', onPress: () => switchUserRole('police_station') },
-      { text: 'Fire Station', onPress: () => switchUserRole('fire_station') },
-      { text: 'Ambulance', onPress: () => switchUserRole('ambulance') },
-      { text: 'Admin', onPress: () => switchUserRole('admin') },
     ]);
   };
 
@@ -53,10 +42,6 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.section}>
-          <TouchableOpacity style={styles.menuItem} onPress={handleSwitchRole}>
-            <Text style={styles.menuText}>Switch Role (Demo)</Text>
-          </TouchableOpacity>
-
           <TouchableOpacity style={[styles.menuItem, styles.logoutButton]} onPress={handleLogout}>
             <Ionicons name="log-out" size={20} color="#EF4444" />
             <Text style={styles.logoutText}>Logout</Text>
@@ -142,11 +127,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-  },
-  menuText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: '#111827',
   },
   logoutButton: {
     backgroundColor: '#FEE2E2',

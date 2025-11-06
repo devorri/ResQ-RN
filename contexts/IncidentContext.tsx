@@ -33,7 +33,8 @@ export const [IncidentContext, useIncidents] = createContextHook(() => {
         categories: incident.categories || [],
         title: incident.title,
         description: incident.description,
-        image_url: incident.image_url,
+        image_url: incident.image_url, // Now contains comma-separated URLs
+        video_url: incident.video_url, // Single video URL
         location: {
           latitude: incident.latitude,
           longitude: incident.longitude,
@@ -88,7 +89,8 @@ export const [IncidentContext, useIncidents] = createContextHook(() => {
           categories: data.categories,
           title: data.title,
           description: data.description,
-          image_url: data.image?.uri,
+          image_url: data.image_url, // Comma-separated image URLs
+          video_url: data.video_url, // Single video URL
           latitude: data.latitude,
           longitude: data.longitude,
           address: data.address,
@@ -122,7 +124,8 @@ export const [IncidentContext, useIncidents] = createContextHook(() => {
           categories: incidentData.categories || [],
           title: incidentData.title,
           description: incidentData.description,
-          image_url: incidentData.image_url,
+          image_url: incidentData.image_url, // Comma-separated URLs
+          video_url: incidentData.video_url, // Single video URL
           location: {
             latitude: incidentData.latitude,
             longitude: incidentData.longitude,

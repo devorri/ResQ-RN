@@ -2,7 +2,6 @@ import { CATEGORY_CONFIG } from '@/constants/category';
 import { COLORS } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIncidents } from '@/contexts/IncidentContext';
-import { MOCK_STATIONS } from '@/mocks/data';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -227,7 +226,7 @@ export default function HomeScreen() {
 
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Emergency Services</Text>
-              <Text style={styles.sectionDescription}>Tap to report emergency or call station</Text>
+              
 
               {/* Police Card */}
               <TouchableOpacity
@@ -251,17 +250,7 @@ export default function HomeScreen() {
                   <View style={styles.emergencyTypes}>
                     <Text style={styles.emergencyType}>Theft | Robbery | Assault | Fraud | Homicide | Vehicular Accident | Hit-and-Run | Reckless Driving | Drunk Driving (DUI)</Text>
                   </View>
-                  <TouchableOpacity 
-                    style={styles.callButton}
-                    onPress={(e) => {
-                      e.stopPropagation(); // Prevent card press
-                      const policeStation = MOCK_STATIONS.find(s => s.type === 'police');
-                      if (policeStation) handleCall(policeStation.contact_number);
-                    }}
-                  >
-                    <Ionicons name="call" size={16} color="#FFFFFF" />
-                    <Text style={styles.callButtonText}>Call Police</Text>
-                  </TouchableOpacity>
+               
                 </View>
               </TouchableOpacity>
 
@@ -288,17 +277,7 @@ export default function HomeScreen() {
                     <Text style={styles.emergencyType}>Medical Emergency Report | Accident Injury Report</Text>
                     <Text style={styles.emergencyType}>Cardiac Arrest Report | Trauma or Wound Report | Patient Transport Report</Text>
                   </View>
-                  <TouchableOpacity 
-                    style={styles.callButton}
-                    onPress={(e) => {
-                      e.stopPropagation(); // Prevent card press
-                      const ambulanceStation = MOCK_STATIONS.find(s => s.type === 'ambulance');
-                      if (ambulanceStation) handleCall(ambulanceStation.contact_number);
-                    }}
-                  >
-                    <Ionicons name="call" size={16} color="#FFFFFF" />
-                    <Text style={styles.callButtonText}>Call Ambulance</Text>
-                  </TouchableOpacity>
+                  
                 </View>
               </TouchableOpacity>
 
@@ -326,17 +305,7 @@ export default function HomeScreen() {
                     <Text style={styles.emergencyType}>Explosion Report | Fire Investigation Report</Text>
                     <Text style={styles.emergencyType}>Hazardous Materials (Hazmat) Report</Text>
                   </View>
-                  <TouchableOpacity 
-                    style={styles.callButton}
-                    onPress={(e) => {
-                      e.stopPropagation(); // Prevent card press
-                      const fireStation = MOCK_STATIONS.find(s => s.type === 'fire');
-                      if (fireStation) handleCall(fireStation.contact_number);
-                    }}
-                  >
-                    <Ionicons name="call" size={16} color="#FFFFFF" />
-                    <Text style={styles.callButtonText}>Call Firefighters</Text>
-                  </TouchableOpacity>
+                 
                 </View>
               </TouchableOpacity>
             </View>
@@ -664,11 +633,7 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 8,
   },
-  sectionDescription: {
-    fontSize: 14,
-    color: COLORS.text.secondary,
-    marginBottom: 16,
-  },
+  
   emergencyCard: {
     height: 180,
     borderRadius: 12,

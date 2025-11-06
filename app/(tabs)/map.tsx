@@ -13,6 +13,7 @@ let Marker: any;
 let PROVIDER_GOOGLE: any;
 let Region: any;
 let Callout: any;
+let Polyline: any;
 
 if (Platform.OS !== 'web') {
   const mapModule = require('react-native-maps');
@@ -21,6 +22,7 @@ if (Platform.OS !== 'web') {
   PROVIDER_GOOGLE = mapModule.PROVIDER_GOOGLE;
   Region = mapModule.Region;
   Callout = mapModule.Callout;
+  Polyline = mapModule.Polyline;
 }
 
 const INITIAL_REGION = {
@@ -29,6 +31,12 @@ const INITIAL_REGION = {
   latitudeDelta: 0.0922,
   longitudeDelta: 0.0421,
 };
+
+interface Route {
+  coordinates: { latitude: number; longitude: number }[];
+  distance: string;
+  duration: string;
+}
 
 export default function MapScreen() {
   const insets = useSafeAreaInsets();
@@ -44,11 +52,24 @@ export default function MapScreen() {
   }>(INITIAL_REGION);
   const [showResponseCard, setShowResponseCard] = useState(false);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
+  const [responderLocations, setResponderLocations] = useState<{[key: string]: {latitude: number; longitude: number}}>({});
+  const [routes, setRoutes] = useState<{[key: string]: Route}>({});
   const mapRef = useRef<any>(null);
 
   useEffect(() => {
     requestLocationPermission();
+    startLocationTracking();
   }, []);
+
+  // Simulate responder location updates and calculate routes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      updateResponderLocations();
+      calculateRoutes();
+    }, 5000); // Update every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [incidents, responderLocations]);
 
   const requestLocationPermission = async () => {
     try {
@@ -87,6 +108,214 @@ export default function MapScreen() {
     } finally {
       setIsLoadingLocation(false);
     }
+  };
+
+  const startLocationTracking = async () => {
+    // Start watching position for real-time updates
+    await Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.High,
+        distanceInterval: 10, // Update every 10 meters
+        timeInterval: 5000, // Update every 5 seconds
+      },
+      (location) => {
+        const newLocation = {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        };
+        setUserLocation(newLocation);
+        
+        // If current user is a responder, update their location
+        if (user?.role !== 'user') {
+          setResponderLocations(prev => ({
+            ...prev,
+            [user?.id || 'current']: newLocation
+          }));
+        }
+      }
+    );
+  };
+
+  const updateResponderLocations = () => {
+    const newLocations: {[key: string]: {latitude: number; longitude: number}} = {};
+    
+    // Get all accepted incidents with responders
+    const acceptedIncidents = incidents.filter(incident => 
+      (incident.status === 'accepted' || incident.status === 'in_progress') && 
+      incident.responder_id // Only incidents with responder_id
+    );
+
+    acceptedIncidents.forEach(incident => {
+      // Type guard to ensure responder_id is not null
+      if (incident.responder_id) {
+        // Simulate responder moving towards incident
+        const incidentLocation = incident.location;
+        const responderId = incident.responder_id.toString();
+        
+        if (responderLocations[responderId]) {
+          // Move responder 10% closer to incident each update
+          const currentLocation = responderLocations[responderId];
+          const newLat = currentLocation.latitude + (incidentLocation.latitude - currentLocation.latitude) * 0.1;
+          const newLng = currentLocation.longitude + (incidentLocation.longitude - currentLocation.longitude) * 0.1;
+          
+          newLocations[responderId] = {
+            latitude: newLat,
+            longitude: newLng
+          };
+        } else {
+          // Start responder from a random nearby location
+          newLocations[responderId] = {
+            latitude: incidentLocation.latitude + (Math.random() - 0.5) * 0.01,
+            longitude: incidentLocation.longitude + (Math.random() - 0.5) * 0.01
+          };
+        }
+      }
+    });
+
+    setResponderLocations(newLocations);
+  };
+
+  // Calculate routes using our FREE simulated system
+  const calculateRoutes = async () => {
+    const incidentsWithResponders = incidents.filter(incident => 
+      (incident.status === 'accepted' || incident.status === 'in_progress') && 
+      incident.responder_id && // Ensure responder_id is not null
+      responderLocations[incident.responder_id.toString()]
+    );
+
+    for (const incident of incidentsWithResponders) {
+      // Type guard to ensure responder_id is not null
+      if (!incident.responder_id) continue;
+      
+      const responderId = incident.responder_id.toString();
+      const responderLocation = responderLocations[responderId];
+      const incidentLocation = incident.location;
+
+      try {
+        // Use our FREE simulated route system
+        const simulatedRoute = await calculateFreeRoute(
+          responderLocation,
+          incidentLocation
+        );
+        
+        setRoutes(prev => ({
+          ...prev,
+          [incident.id]: simulatedRoute
+        }));
+      } catch (error) {
+        console.error('Error calculating route:', error);
+        // Fallback to straight line if simulation fails
+        const fallbackRoute = createStraightLineRoute(responderLocation, incidentLocation);
+        setRoutes(prev => ({
+          ...prev,
+          [incident.id]: fallbackRoute
+        }));
+      }
+    }
+  };
+
+  // FREE route calculation - no API needed!
+  const calculateFreeRoute = async (
+    origin: { latitude: number; longitude: number },
+    destination: { latitude: number; longitude: number }
+  ): Promise<Route> => {
+    // Simulate processing delay
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Create a curved route that looks realistic
+    const coordinates = createCurvedRoute(origin, destination);
+    
+    // Calculate approximate distance and duration
+    const distance = calculateDistance(origin, destination);
+    const duration = calculateDuration(distance);
+
+    return {
+      coordinates,
+      distance: `${(distance / 1000).toFixed(1)} km`,
+      duration: `${duration} min`
+    };
+  };
+
+  // Create a curved route that simulates following roads
+  const createCurvedRoute = (
+    origin: { latitude: number; longitude: number },
+    destination: { latitude: number; longitude: number }
+  ): { latitude: number; longitude: number }[] => {
+    const coordinates = [];
+    const steps = 20; // Number of points in the route
+    
+    // Calculate control point for Bezier curve (creates a natural curved path)
+    const midLat = (origin.latitude + destination.latitude) / 2;
+    const midLng = (origin.longitude + destination.longitude) / 2;
+    
+    // Add some curvature to simulate following roads
+    const controlLat = midLat + (Math.random() - 0.5) * 0.01;
+    const controlLng = midLng + (Math.random() - 0.5) * 0.01;
+
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      
+      // Quadratic Bezier curve calculation
+      const lat = 
+        Math.pow(1 - t, 2) * origin.latitude +
+        2 * (1 - t) * t * controlLat +
+        Math.pow(t, 2) * destination.latitude;
+        
+      const lng = 
+        Math.pow(1 - t, 2) * origin.longitude +
+        2 * (1 - t) * t * controlLng +
+        Math.pow(t, 2) * destination.longitude;
+
+      coordinates.push({ latitude: lat, longitude: lng });
+    }
+
+    return coordinates;
+  };
+
+  // Create a straight line route (fallback)
+  const createStraightLineRoute = (
+    origin: { latitude: number; longitude: number },
+    destination: { latitude: number; longitude: number }
+  ): Route => {
+    const coordinates = [
+      origin,
+      destination
+    ];
+
+    const distance = calculateDistance(origin, destination);
+    const duration = calculateDuration(distance);
+
+    return {
+      coordinates,
+      distance: `${(distance / 1000).toFixed(1)} km`,
+      duration: `${duration} min`
+    };
+  };
+
+  // Calculate distance between two points in meters
+  const calculateDistance = (
+    point1: { latitude: number; longitude: number },
+    point2: { latitude: number; longitude: number }
+  ): number => {
+    const R = 6371e3; // Earth's radius in meters
+    const φ1 = point1.latitude * Math.PI / 180;
+    const φ2 = point2.latitude * Math.PI / 180;
+    const Δφ = (point2.latitude - point1.latitude) * Math.PI / 180;
+    const Δλ = (point2.longitude - point1.longitude) * Math.PI / 180;
+
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    return R * c;
+  };
+
+  // Calculate approximate duration based on distance
+  const calculateDuration = (distance: number): number => {
+    const averageSpeed = 40; // km/h
+    const durationHours = distance / 1000 / averageSpeed;
+    return Math.ceil(durationHours * 60); // Convert to minutes
   };
 
   // Get real stations with is_active field
@@ -155,6 +384,8 @@ export default function MapScreen() {
     if (Platform.OS === 'web') return null;
     const primaryCategory = incident.categories[0];
     const categoryConfig = CATEGORY_CONFIG[primaryCategory];
+    const route = routes[incident.id];
+
     return (
       <Marker
         key={`incident-${incident.id}`}
@@ -186,9 +417,81 @@ export default function MapScreen() {
             </View>
             <Text style={styles.calloutDescription}>{incident.description}</Text>
             <Text style={[styles.statusBadge, { color: categoryConfig.color }]}>{incident.status.toUpperCase()}</Text>
+            {(incident.status === 'accepted' || incident.status === 'in_progress') && (
+              <>
+                <Text style={styles.responderInfo}>Responder en route</Text>
+                {route && (
+                  <View style={styles.routeInfo}>
+                    <Text style={styles.routeText}>📏 {route.distance}</Text>
+                    <Text style={styles.routeText}>⏱️ {route.duration}</Text>
+                  </View>
+                )}
+              </>
+            )}
           </View>
         </Callout>
       </Marker>
+    );
+  };
+
+  const renderResponderMarker = (incident: Incident) => {
+    if (Platform.OS === 'web') return null;
+    // Check if responder_id exists and we have location data
+    if (!incident.responder_id || !responderLocations[incident.responder_id.toString()]) return null;
+
+    const responderLocation = responderLocations[incident.responder_id.toString()];
+    const primaryCategory = incident.categories[0];
+    const categoryConfig = CATEGORY_CONFIG[primaryCategory];
+    const route = routes[incident.id];
+
+    return (
+      <Marker
+        key={`responder-${incident.id}`}
+        coordinate={responderLocation}
+        pinColor="#000000" // Black for responders
+      >
+        <View style={[styles.responderMarker, { borderColor: categoryConfig.color }]}>
+          <Ionicons name="car" size={16} color={categoryConfig.color} />
+        </View>
+        <Callout>
+          <View style={styles.callout}>
+            <Text style={styles.calloutTitle}>Responder</Text>
+            <Text style={styles.calloutDescription}>En route to incident</Text>
+            <Text style={styles.responderInfo}>
+              {incident.responder?.name || 'Emergency Responder'}
+            </Text>
+            <Text style={styles.responderStatus}>
+              Status: {incident.status === 'accepted' ? 'Heading to location' : 'At scene'}
+            </Text>
+            {route && (
+              <View style={styles.routeInfo}>
+                <Text style={styles.routeText}>Distance: {route.distance}</Text>
+                <Text style={styles.routeText}>ETA: {route.duration}</Text>
+              </View>
+            )}
+          </View>
+        </Callout>
+      </Marker>
+    );
+  };
+
+  const renderRouteLine = (incident: Incident) => {
+    if (Platform.OS === 'web') return null;
+    const route = routes[incident.id];
+    if (!route || route.coordinates.length < 2) return null;
+
+    const primaryCategory = incident.categories[0];
+    const categoryConfig = CATEGORY_CONFIG[primaryCategory];
+
+    return (
+      <Polyline
+        key={`route-${incident.id}`}
+        coordinates={route.coordinates}
+        strokeColor={categoryConfig.color}
+        strokeWidth={4}
+        lineCap="round"
+        lineJoin="round"
+      />
     );
   };
 
@@ -229,6 +532,12 @@ export default function MapScreen() {
     ? incidents.filter(i => i.status === 'pending' || i.status === 'accepted' || i.status === 'in_progress')
     : [];
 
+  // Get incidents with responders for route display
+  const incidentsWithResponders = activeIncidents.filter(incident => 
+    (incident.status === 'accepted' || incident.status === 'in_progress') && 
+    incident.responder_id // Only incidents with responder_id
+  );
+
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: 24 + insets.top }]}>
@@ -237,10 +546,16 @@ export default function MapScreen() {
           <Text style={styles.subtitle}>
             {realStations.length} emergency station{realStations.length !== 1 ? 's' : ''}
             {canSeeIncidents && activeIncidents.length > 0 && ` • ${activeIncidents.length} active incident${activeIncidents.length !== 1 ? 's' : ''}`}
+            {incidentsWithResponders.length > 0 && ` • ${incidentsWithResponders.length} responder${incidentsWithResponders.length !== 1 ? 's' : ''} en route`}
           </Text>
           {!canSeeIncidents && (
             <Text style={styles.userNote}>
               Emergency stations near you
+            </Text>
+          )}
+          {incidentsWithResponders.length > 0 && (
+            <Text style={styles.responderNote}>
+              🚨 {incidentsWithResponders.length} responder{incidentsWithResponders.length !== 1 ? 's' : ''} currently responding
             </Text>
           )}
         </View>
@@ -253,6 +568,7 @@ export default function MapScreen() {
             <Text style={styles.webMapSubtext}>
               Showing {realStations.length} emergency stations
               {canSeeIncidents && ` and ${activeIncidents.length} active incidents`}
+              {incidentsWithResponders.length > 0 && ` with ${incidentsWithResponders.length} responders en route`}
             </Text>
             <Text style={styles.webMapNote}>
               Location: {userLocation ? `${userLocation.latitude.toFixed(4)}, ${userLocation.longitude.toFixed(4)}` : 'Loading...'}
@@ -261,6 +577,26 @@ export default function MapScreen() {
               <Text style={styles.privacyNote}>
                 Active incident locations are only visible to emergency services
               </Text>
+            )}
+            {incidentsWithResponders.length > 0 && (
+              <View style={styles.responderInfoWeb}>
+                <Text style={styles.responderTitle}>Active Responses:</Text>
+                {incidentsWithResponders.map(incident => {
+                  const route = routes[incident.id];
+                  return (
+                    <View key={incident.id} style={styles.responderItem}>
+                      <Text style={styles.responderItemText}>
+                        • {incident.title} - {incident.responder?.name || 'Responder'}
+                      </Text>
+                      {route && (
+                        <Text style={styles.routeInfoWeb}>
+                          📏 {route.distance} • ⏱️ {route.duration}
+                        </Text>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
             )}
           </View>
         </View>
@@ -277,6 +613,8 @@ export default function MapScreen() {
         >
           {realStations.map((station) => renderStationMarker(station))}
           {canSeeIncidents && activeIncidents.map((incident) => renderIncidentMarker(incident))}
+          {canSeeIncidents && incidentsWithResponders.map((incident) => renderResponderMarker(incident))}
+          {canSeeIncidents && incidentsWithResponders.map((incident) => renderRouteLine(incident))}
         </MapView>
       )}
 
@@ -318,6 +656,30 @@ export default function MapScreen() {
               <Text style={styles.statusText}>Status: {selectedIncident.status.toUpperCase()}</Text>
             </View>
 
+            {(selectedIncident.status === 'accepted' || selectedIncident.status === 'in_progress') && (
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>Responder</Text>
+                <Text style={styles.responderInfo}>
+                  {selectedIncident.responder?.name || 'Emergency Responder'} is en route
+                </Text>
+                {routes[selectedIncident.id] && (
+                  <View style={styles.routeDetails}>
+                    <Text style={styles.routeDetail}>
+                      📏 Distance: {routes[selectedIncident.id].distance}
+                    </Text>
+                    <Text style={styles.routeDetail}>
+                      ⏱️ ETA: {routes[selectedIncident.id].duration}
+                    </Text>
+                  </View>
+                )}
+                {selectedIncident.responder_id && responderLocations[selectedIncident.responder_id.toString()] && (
+                  <Text style={styles.responderLocation}>
+                    Current location: {responderLocations[selectedIncident.responder_id.toString()].latitude.toFixed(4)}, {responderLocations[selectedIncident.responder_id.toString()].longitude.toFixed(4)}
+                  </Text>
+                )}
+              </View>
+            )}
+
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>Location</Text>
               <Text style={styles.locationText}>
@@ -337,10 +699,7 @@ export default function MapScreen() {
               <Text style={styles.descriptionText}>{selectedIncident.description}</Text>
             </View>
 
-            <TouchableOpacity style={styles.callButton} onPress={handleCallStation}>
-              <Ionicons name="call" size={20} color="#FFFFFF" />
-              <Text style={styles.callButtonText}>Call Station</Text>
-            </TouchableOpacity>
+           
           </View>
 
           <TouchableOpacity 
@@ -354,6 +713,7 @@ export default function MapScreen() {
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {
@@ -392,6 +752,12 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     fontStyle: 'italic',
   },
+  responderNote: {
+    fontSize: 12,
+    color: '#DC2626',
+    fontWeight: '600',
+    marginTop: 4,
+  },
   map: {
     flex: 1,
   },
@@ -413,6 +779,21 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 20,
     fontWeight: '900' as const,
+  },
+  responderMarker: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 3,
+    borderColor: '#000000',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
   callout: {
     minWidth: 200,
@@ -444,6 +825,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700' as const,
     marginTop: 4,
+  },
+  responderInfo: {
+    fontSize: 12,
+    color: '#DC2626',
+    fontWeight: '600' as const,
+    marginTop: 4,
+  },
+  responderStatus: {
+    fontSize: 12,
+    color: '#7C3AED',
+    fontWeight: '600' as const,
+    marginTop: 2,
+  },
+  routeInfo: {
+    marginTop: 4,
+    padding: 4,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 4,
+  },
+  routeText: {
+    fontSize: 10,
+    color: '#374151',
+    fontWeight: '500',
   },
   categoriesContainer: {
     flexDirection: 'row',
@@ -525,6 +929,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333333',
     lineHeight: 18,
+  },
+  responderLocation: {
+    fontSize: 12,
+    color: '#666666',
+    fontStyle: 'italic',
+    marginTop: 2,
+  },
+  routeDetails: {
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 6,
+  },
+  routeDetail: {
+    fontSize: 12,
+    color: '#374151',
+    fontWeight: '500',
+    marginBottom: 2,
   },
   emergencyType: {
     fontSize: 16,
@@ -622,6 +1044,33 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#EF4444',
     textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  responderInfoWeb: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#DC2626',
+  },
+  responderTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#DC2626',
+    marginBottom: 8,
+  },
+  responderItem: {
+    marginBottom: 8,
+  },
+  responderItemText: {
+    fontSize: 12,
+    color: '#7F1D1D',
+    marginBottom: 2,
+  },
+  routeInfoWeb: {
+    fontSize: 11,
+    color: '#374151',
     fontStyle: 'italic',
   },
 });
