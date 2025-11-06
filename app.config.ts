@@ -1,0 +1,86 @@
+import 'dotenv/config';
+
+export default {
+  expo: {
+    name: 'Emergency Response App',
+    slug: 'emergency-response-app-ge64s7g',
+    version: '1.0.0',
+    orientation: 'portrait',
+    icon: './assets/images/icon.png',
+    scheme: 'myapp',
+    userInterfaceStyle: 'automatic',
+    newArchEnabled: true,
+    splash: {
+      image: './assets/images/splash-icon.png',
+      resizeMode: 'contain',
+      backgroundColor: '#ffffff',
+    },
+    ios: {
+      supportsTablet: true,
+      bundleIdentifier: 'app.rork.emergency-response-app-ge64s7g',
+      infoPlist: {
+        NSLocationAlwaysAndWhenInUseUsageDescription: 'Allow $(PRODUCT_NAME) to use your location.',
+        NSLocationAlwaysUsageDescription: 'Allow $(PRODUCT_NAME) to use your location.',
+        NSLocationWhenInUseUsageDescription: 'Allow $(PRODUCT_NAME) to use your location.',
+        UIBackgroundModes: ['location'],
+        NSPhotoLibraryUsageDescription: 'Allow $(PRODUCT_NAME) to access your photos',
+        NSCameraUsageDescription: 'Allow $(PRODUCT_NAME) to access your camera',
+        NSMicrophoneUsageDescription: 'Allow $(PRODUCT_NAME) to access your microphone',
+      },
+    },
+    android: {
+      adaptiveIcon: {
+        foregroundImage: './assets/images/icon.png',
+        backgroundColor: '#ffffff',
+      },
+      package: 'app.rork.emergency_response_app_ge64s7g',
+      permissions: [
+        'ACCESS_COARSE_LOCATION',
+        'ACCESS_FINE_LOCATION',
+        'FOREGROUND_SERVICE',
+        'FOREGROUND_SERVICE_LOCATION',
+        'ACCESS_BACKGROUND_LOCATION',
+        'CAMERA',
+        'READ_EXTERNAL_STORAGE',
+        'WRITE_EXTERNAL_STORAGE',
+      ],
+    },
+    web: {
+      favicon: './assets/images/favicon.png',
+    },
+    plugins: [
+      [
+        'expo-router',
+        { origin: 'https://rork.com/' },
+      ],
+      [
+        'expo-location',
+        {
+          isAndroidForegroundServiceEnabled: true,
+          isAndroidBackgroundLocationEnabled: true,
+          isIosBackgroundLocationEnabled: true,
+          locationAlwaysAndWhenInUsePermission:
+            'Allow $(PRODUCT_NAME) to use your location.',
+        },
+      ],
+      [
+        'expo-image-picker',
+        {
+          photosPermission:
+            'The app accesses your photos to let you share them with your friends.',
+        },
+      ],
+      'expo-web-browser',
+    ],
+    experiments: {
+      typedRoutes: true,
+    },
+
+    // 👇 Add environment variables here
+    extra: {
+      supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
+      supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+      apiUrl: process.env.EXPO_PUBLIC_API_URL,
+    },
+  },
+};
